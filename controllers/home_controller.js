@@ -6,5 +6,5 @@ module.exports = function(app){
 	  res.send({message: 'API service running'});
 	};
 	return home;
-}
+};
 
