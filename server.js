@@ -5,8 +5,8 @@ const api_url="https://one.nhtsa.gov/webapi/api/SafetyRatings";
 var util = require('util'),
     bodyParser = require('body-parser'),
     expressValidator = require('express-validator');
-
-
+// async
+var async=require('async');
 var Client = require('node-rest-client').Client;
 var client = new Client();
 
@@ -15,16 +15,15 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(expressValidator()); // this line must be immediately after any of the bodyParser middlewares!
 //logger
 var logger = require('morgan');
-// root url
-app.get('/', function (req, res) {
-  res.type('application/json');
-  res.send({message: 'API service running'});
-})
 
+//controllers
+var home=require('./controllers/home_controller.js');
+var vehicles=require('./controllers/vehicles_controller.js');
+// routes
+app.get('/',home.index);
 app.get('/vehicles/:year/:manufacturer/:model', function (req, res) {
 	// validations
 	// year
-
 	req.checkParams('year', 'Model year is empty').notEmpty();
 	req.checkParams('year', 'Model year is not an integer').isInt();
 	req.checkParams('year', 'Model year is wrong').isLength({min: 4, max: 4});
@@ -40,7 +39,6 @@ app.get('/vehicles/:year/:manufacturer/:model', function (req, res) {
       res.status(400).send('Errors: ' + util.inspect(result.array()));
       return;
     }
-    // console.log(req.params);
     try{
 
     
@@ -52,20 +50,29 @@ app.get('/vehicles/:year/:manufacturer/:model', function (req, res) {
 	    		return;
 	    	} 
 		    // raw response 
-		    // console.log(response);
 		    
 		    var filterData=[];
 		    // filtering data
-		    data.Results.forEach(function(value,index){
-		    	// console.log(value);
-		    	filterData.push({'Description': value.VehicleDescription,'VehicleId': value.VehicleId});
-		    });
-		    // if(data.Results.length > 0)
-		    delete(data.Message);
-		    // pushing filtered Results
-		    data.Results=filterData;
-		    res.type('application/json');
-		  	res.send(data);
+		    async.eachSeries(data.Results,function(value,callback){
+		    	if(req.query.withRating=='true'){
+		    		client.get(api_url+'/VehicleId/'+value.VehicleId+'?format.json', function (ratingData, ratingResponse) {
+		    			filterData.push({'Description': value.VehicleDescription,'VehicleId': value.VehicleId , withRating: ratingData.Results[0].OverallRating});
+		    			callback();	
+		    		});
+		    	}
+		    	else{
+		    		filterData.push({'Description': value.VehicleDescription,'VehicleId': value.VehicleId});
+		    		callback();	
+		    	}
+		    
+		    }, function done() {
+		    		// removing message 
+				    delete(data.Message);
+				    // pushing filtered Results
+				    data.Results=filterData;
+				    res.type('application/json');
+				  	res.send(data); 
+				});
 			});
 		}
     catch(e){
@@ -97,7 +104,6 @@ app.post('/vehicles', function (req, res) {
     // console.log(req.params);
     try{
 
-    
 	    client.get(api_url+'/modelyear/'+req.body.modelYear+'/make/'+req.body.manufacturer+'/model/'+req.body.model+'?format.json', function (data, response) {
 	    // parsed response body as js object
 	    	console.log(data);
@@ -106,15 +112,12 @@ app.post('/vehicles', function (req, res) {
 	    		return;
 	    	} 
 		    // raw response 
-		    // console.log(response);
-		    
 		    var filterData=[];
 		    // filtering data
 		    data.Results.forEach(function(value,index){
 		    	// console.log(value);
 		    	filterData.push({'Description': value.VehicleDescription,'VehicleId': value.VehicleId});
 		    });
-		    // if(data.Results.length > 0)
 		    delete(data.Message);
 		    // pushing filtered Results
 		    data.Results=filterData;
